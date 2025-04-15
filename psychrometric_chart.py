@@ -1,14 +1,17 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from psychrometric_functions import pressao_vapor_saturado, razao_mistura1, temperatura_ponto_orvalho, temperatura_b_molhado, entalpia, pressao_vapor
+from translations import get_text
 
-def plot_psychrometric_chart(data, patm=101.325, comparison_data=None):
+def plot_psychrometric_chart(data, patm=101.325, altitude=0, lang='pt', comparison_data=None):
     """
     Gera um gráfico psicrométrico com base nos dados fornecidos
     
     Args:
         data: Dicionário contendo o tipo de dados e valores para plotar
         patm: Pressão atmosférica (kPa)
+        altitude: Altitude do local (m)
+        lang: Idioma para os textos do gráfico ('pt' ou 'en')
         comparison_data: Lista de dicionários com processos adicionais para comparação
     
     Returns:
@@ -41,13 +44,13 @@ def plot_psychrometric_chart(data, patm=101.325, comparison_data=None):
     # Configurar eixos
     ax.set_xlim(tbs_min, tbs_max)
     ax.set_ylim(0, 5)  # Pressão de vapor em kPa, máximo aprox. 5 kPa
-    ax.set_xlabel('Temperatura de Bulbo Seco (°C)')
-    ax.set_ylabel('Pressão de Vapor (kPa)')
+    ax.set_xlabel(get_text('chart_x_axis', lang))
+    ax.set_ylabel(get_text('chart_y_axis', lang))
     
     # Criar segundo eixo Y à direita para razão de mistura
     ax2 = ax.twinx()
     ax2.set_ylim(0, rm_max)  # Razão de mistura em g/kg (0-30)
-    ax2.set_ylabel('Razão de Mistura (g/kg)')
+    ax2.set_ylabel(get_text('chart_y2_axis', lang))
     
     ax.grid(True, linestyle='--', alpha=0.7)
     
@@ -63,7 +66,7 @@ def plot_psychrometric_chart(data, patm=101.325, comparison_data=None):
         rm_saturacao.append(rm)
     
     # Plotar no eixo principal (pressão de vapor)
-    ax.plot(tbs_range, pv_saturacao, 'b-', linewidth=2, label='UR = 100%')
+    ax.plot(tbs_range, pv_saturacao, 'b-', linewidth=2, label=get_text('rh_100_label', lang))
     # Plotar no eixo secundário (razão de mistura)
     ax2.plot(tbs_range, rm_saturacao, 'b-', linewidth=2, alpha=0.1)
     
@@ -95,11 +98,14 @@ def plot_psychrometric_chart(data, patm=101.325, comparison_data=None):
             # Usar um ponto intermediário válido para o rótulo
             idx = valid_indices[len(valid_indices) // 2]
             
+            # Obter texto traduzido para o rótulo UR
+            rh_text = get_text('rh_label', lang, value=ur)
+            
             if ur == 10:
-                ax.text(tbs_range[idx], pv_ur[idx], f"{ur}%", 
+                ax.text(tbs_range[idx], pv_ur[idx], rh_text, 
                         color='blue', fontsize=8, ha='left', va='bottom')
             else:
-                ax.text(tbs_range[idx], pv_ur[idx], f"{ur}%", 
+                ax.text(tbs_range[idx], pv_ur[idx], rh_text, 
                         color='blue', fontsize=8, ha='center', va='center')
     
     # Removidas as linhas de temperatura de bulbo molhado constante conforme solicitado
@@ -153,7 +159,8 @@ def plot_psychrometric_chart(data, patm=101.325, comparison_data=None):
                 # Usar um ponto a 70% do comprimento da linha
                 idx = int(len(tbs_ent) * 0.7)
                 if idx < len(tbs_ent):
-                    ax.text(tbs_ent[idx], pv_ent[idx], f"h={ent} kJ/kg", 
+                    enthalpy_text = get_text('enthalpy_label', lang, value=ent)
+                    ax.text(tbs_ent[idx], pv_ent[idx], enthalpy_text, 
                             color='red', fontsize=8, ha='right', va='center')
     
     # Plotar dados específicos com base no tipo
@@ -190,7 +197,7 @@ def plot_psychrometric_chart(data, patm=101.325, comparison_data=None):
             pv = pressao_vapor(rm, patm)
         
         # Plotar no eixo principal (pressão de vapor) - apenas o círculo preto sem rótulo
-        ax.plot(tbs, pv, 'ko', markersize=10, markeredgewidth=2, label='Ponto de Estado')
+        ax.plot(tbs, pv, 'ko', markersize=10, markeredgewidth=2, label=get_text('state_point_label', lang))
         # Plotar no eixo secundário (razão de mistura) - invisível para referência
         ax2.plot(tbs, rm_gkg, 'ko', markersize=10, markeredgewidth=2, alpha=0.1)
     
@@ -246,9 +253,70 @@ def plot_psychrometric_chart(data, patm=101.325, comparison_data=None):
         
         # Plotar pontos e linha com maior destaque no eixo principal (pressão de vapor)
         # Sem rótulos, apenas os círculos coloridos
-        ax.plot(tbs1, pv1, 'ro', markersize=10, markeredgewidth=2, label='Ponto 1')
-        ax.plot(tbs2, pv2, 'bo', markersize=10, markeredgewidth=2, label='Ponto 2')
-        ax.plot([tbs1, tbs2], [pv1, pv2], 'k-', linewidth=3)  # Linha mais grossa
+        ax.plot(tbs1, pv1, 'ro', markersize=10, markeredgewidth=2, label=get_text('point_1_label', lang))
+        ax.plot(tbs2, pv2, 'bo', markersize=10, markeredgewidth=2, label=get_text('point_2_label', lang))
+        
+        # Verificar o tipo de processo
+        if 'process_type' in data and data['process_type'] == 'heating_cooling' and rm2 < rm1:
+            # Processo especial de aquecimento/resfriamento com condensação
+            # Encontrar a interseção com a curva de saturação (TPO)
+            tpo = temperatura_ponto_orvalho(pv1)  # Ponto de orvalho = temperatura onde UR=100% para o mesmo pv
+            pvs_tpo = pressao_vapor_saturado(tpo)  # Deve ser igual a pv1
+            
+            # Calcular a pressão de vapor saturado para o traçado da curva de saturação
+            # entre o ponto de orvalho (tpo) e a temperatura de bulbo seco 2 (tbs2)
+            tbs_saturacao = np.linspace(tpo, tbs2, 50)
+            pv_saturacao = []
+            
+            for t in tbs_saturacao:
+                pv_saturacao.append(pressao_vapor_saturado(t))
+            
+            # Desenhar o caminho real do processo:
+            # 1. Linha horizontal do ponto 1 até o ponto onde UR=100% (tpo, pv1)
+            ax.plot([tbs1, tpo], [pv1, pv1], 'k-', linewidth=3)
+            
+            # 2. Curva seguindo a linha de UR=100% do ponto de orvalho até o ponto 2
+            ax.plot(tbs_saturacao, pv_saturacao, 'k-', linewidth=3)
+        elif 'process' in data and data['process'] == 'u_adiabatica':
+            # Processo de umidificação adiabática - linha de entalpia constante
+            # A entalpia é constante, então vamos desenhar uma linha de entalpia entre os pontos
+            
+            # Definir pontos entre rm1 e rm2 para desenhar a linha de entalpia
+            if rm1 < rm2:
+                rm_points = np.linspace(rm1, rm2, 50)  # Do menor para o maior
+            else:
+                rm_points = np.linspace(rm2, rm1, 50)  # Do menor para o maior
+                
+            # Obter a entalpia do ponto 1 (que é igual à do ponto 2)
+            # Verificar se temos os resultados disponíveis diretamente
+            if 'process_results' in data and data['process_results']:
+                e1 = data['process_results']['point1']['e']
+            else:
+                # Estimativa da entalpia se não temos os resultados completos
+                e1 = entalpia(tbs1, rm1)
+            
+            tbs_ent = []
+            pv_ent = []
+            
+            for rm in rm_points:
+                # Calcular temperatura para esta entalpia e razão de mistura
+                # usando a mesma fórmula usada para desenhar linhas de entalpia
+                tbs = (e1 - 2501 * rm) / (1.006 + 1.775 * rm)
+                
+                # Verificar se a temperatura está dentro da faixa válida
+                if tbs_min <= tbs <= tbs_max:
+                    # Calcular pressão de vapor correspondente
+                    pv = pressao_vapor(rm, patm)
+                    
+                    tbs_ent.append(tbs)
+                    pv_ent.append(pv)
+            
+            # Desenhar a linha de entalpia constante
+            if len(tbs_ent) > 1:
+                ax.plot(tbs_ent, pv_ent, 'k-', linewidth=3)
+        else:
+            # Processo normal - linha reta entre os pontos
+            ax.plot([tbs1, tbs2], [pv1, pv2], 'k-', linewidth=3)  # Linha mais grossa
         
         # Plotar também no eixo secundário (invisível)
         ax2.plot(tbs1, rm1_gkg, 'ro', markersize=5, alpha=0.1)
@@ -325,9 +393,9 @@ def plot_psychrometric_chart(data, patm=101.325, comparison_data=None):
         
         # Plotar pontos e linhas com maior destaque no eixo principal (pressão de vapor)
         # Sem rótulos, apenas os círculos coloridos
-        ax.plot(tbs1, pv1, 'ro', markersize=10, markeredgewidth=2, label='Fluxo 1')
-        ax.plot(tbs2, pv2, 'go', markersize=10, markeredgewidth=2, label='Fluxo 2')
-        ax.plot(tbs3, pv3, 'bo', markersize=10, markeredgewidth=2, label='Mistura')
+        ax.plot(tbs1, pv1, 'ro', markersize=10, markeredgewidth=2, label=get_text('flow_1_label', lang))
+        ax.plot(tbs2, pv2, 'go', markersize=10, markeredgewidth=2, label=get_text('flow_2_label', lang))
+        ax.plot(tbs3, pv3, 'bo', markersize=10, markeredgewidth=2, label=get_text('mixture_label', lang))
         
         # Linha de mistura com maior destaque
         ax.plot([tbs1, tbs3], [pv1, pv3], 'k--', linewidth=2)
@@ -388,10 +456,12 @@ def plot_psychrometric_chart(data, patm=101.325, comparison_data=None):
                 pv2 = pressao_vapor(rm2, patm)
                 
                 # Processo name ou process type para legenda
-                process_name = comp_data.get('process_name', f'Processo {i+1}')
+                default_process_name = get_text('process_default_name', lang, number=i+1)
+                process_name = comp_data.get('process_name', default_process_name)
                 
                 # Plotar pontos e linha
-                ax.plot(tbs1, pv1, 'o', color=color, markersize=8, label=f"{process_name} - P1")
+                point_label = get_text('point_1_short', lang) 
+                ax.plot(tbs1, pv1, 'o', color=color, markersize=8, label=f"{process_name} - {point_label}")
                 ax.plot(tbs2, pv2, 'o', color=color, markersize=8)
                 ax.plot([tbs1, tbs2], [pv1, pv2], '-', color=color, linewidth=2)
                 
@@ -457,10 +527,12 @@ def plot_psychrometric_chart(data, patm=101.325, comparison_data=None):
                 pv3 = pressao_vapor(rm3, patm)
                 
                 # Nome do processo para a legenda
-                process_name = comp_data.get('process_name', f'Mistura {i+1}')
+                default_mixture_name = get_text('mixture_default_name', lang, number=i+1)
+                process_name = comp_data.get('process_name', default_mixture_name)
                 
                 # Plotar pontos e linhas
-                ax.plot(tbs1, pv1, 'o', color=color, markersize=8, label=f"{process_name} - F1")
+                flow_label = get_text('flow_1_short', lang)
+                ax.plot(tbs1, pv1, 'o', color=color, markersize=8, label=f"{process_name} - {flow_label}")
                 ax.plot(tbs2, pv2, 'o', color=color, markersize=8)
                 ax.plot(tbs3, pv3, 'o', color=color, markersize=8)
                 
@@ -473,7 +545,7 @@ def plot_psychrometric_chart(data, patm=101.325, comparison_data=None):
                 ax2.plot(tbs2, rm2_gkg, 'o', color=color, markersize=5, alpha=0.1)
                 ax2.plot(tbs3, rm3_gkg, 'o', color=color, markersize=5, alpha=0.1)
     
-    ax.set_title(f'Carta Psicrométrica (Patm = {patm:.2f} kPa)')
+    ax.set_title(get_text('chart_title', lang, altitude=altitude))
     ax.legend(loc='upper left')
     
     plt.tight_layout()
